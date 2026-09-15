@@ -1,0 +1,125 @@
+# docker-compose.tp2-rank0.yml - TP=2 rank 0 (API) - start AFTER rank 1
+#
+# Two DGX Sparks - quality seat: 1M YaRN factor-4 + fixed DFlash2 n=7
+# Image: ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni (+ #54367 bind)
+#
+# Order: rank 1 headless FIRST (docker-compose.tp2-rank1.yml), then THIS file.
+# Clients: http://$MASTER_IP:8000  model=aeon
+#
+# B0 knobs same as rank 1. Leave --quantization UNSET. TRITON_ATTN. No prefix cache.
+# Spec is fixed DFlash2 n=7 - NOT the single-Spark Dynamic DFlash lattice.
+#
+# Optional 64k speed seat (same flags, deltas):
+#   remove VLLM_ALLOW_LONG_MAX_MODEL_LEN; remove --hf-overrides;
+#   --max-model-len 65536; --gpu-memory-utilization 0.60; keep DFlash2 n=7
+#
+# Start on rank-0 / master box:
+#   docker compose -f docker-compose.tp2-rank0.yml up -d
+#   docker compose -f docker-compose.tp2-rank0.yml logs -f
+#   curl -s http://127.0.0.1:8000/health
+
+services:
+  vllm-tp2-rank0:
+    image: ${SPARK_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni}
+    container_name: tp2-node0
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "16g"
+    ulimits:
+      memlock: -1
+    cap_add:
+      - IPC_LOCK
+    devices:
+      - /dev/infiniband
+
+    entrypoint: vllm
+
+    environment:
+      - VLLM_HOST_IP=${NODE0_IP:-10.10.10.1}
+      - NCCL_SOCKET_IFNAME=${IFACE:-enp1s0f0np0}
+      - GLOO_SOCKET_IFNAME=${IFACE:-enp1s0f0np0}
+      - NCCL_IB_HCA=${IB_HCA:-=rocep1s0f0:1}
+      - NCCL_IB_GID_INDEX=3
+      - NCCL_DEBUG=WARN
+      - VLLM_USE_FLASHINFER_SAMPLER=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - VLLM_USE_V2_MODEL_RUNNER=0
+      - VLLM_ALLREDUCE_USE_FLASHINFER=0
+      - TORCH_CUDA_ARCH_LIST=12.1a
+      - NVIDIA_FORWARD_COMPAT=1
+      - NVIDIA_DISABLE_REQUIRE=1
+      - ENABLE_NVFP4_SM100=0
+      - VLLM_USE_FLASHINFER_MOE_FP4=0
+
+    volumes:
+      - ${MODEL_HOST_PATH:-./models/aeon-mixed}:/model:ro
+      - ${DRAFT_HOST_PATH:-./models/dflash2}:/draft:ro
+      - ${PATCH_HOST_PATH:-./patches/modelopt-54367.py}:/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
+
+    command:
+      - serve
+      - /model
+      - --served-model-name
+      - aeon
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --tensor-parallel-size
+      - "2"
+      - --nnodes
+      - "2"
+      - --node-rank
+      - "0"
+      - --master-addr
+      - ${MASTER_IP:-10.10.10.1}
+      - --master-port
+      - "${MASTER_PORT:-29501}"
+      - --kv-cache-dtype
+      - fp8_e4m3
+      - --attention-backend
+      - TRITON_ATTN
+      - --max-model-len
+      - "1000000"
+      - --max-num-seqs
+      - "16"
+      - --max-num-batched-tokens
+      - "16384"
+      - --gpu-memory-utilization
+      - "0.70"
+      - --disable-custom-all-reduce
+      - --enable-chunked-prefill
+      - --no-enable-prefix-caching
+      - --mamba-cache-mode
+      - align
+      - --limit-mm-per-prompt
+      - '{"image":4,"video":2}'
+      - --speculative-config
+      - '{"method":"dflash","model":"/draft","num_speculative_tokens":7}'
+      - --reasoning-parser
+      - qwen3
+      - --tool-call-parser
+      - qwen3_coder
+      - --enable-auto-tool-choice
+      - --hf-overrides
+      - '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
+      - --override-generation-config
+      - '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
+      - --trust-remote-code
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 900s
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

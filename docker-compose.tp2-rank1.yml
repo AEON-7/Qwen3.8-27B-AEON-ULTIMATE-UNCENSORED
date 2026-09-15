@@ -1,0 +1,117 @@
+# docker-compose.tp2-rank1.yml - TP=2 rank 1 (headless worker) FIRST
+#
+# Two DGX Sparks - quality seat: 1M YaRN factor-4 + fixed DFlash2 n=7
+# Image: ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni (+ #54367 bind)
+#
+# Order: start THIS file on the second Spark FIRST, then docker-compose.tp2-rank0.yml
+#        on the master. Clients hit http://$MASTER_IP:8000
+#
+# B0 coherence knobs (0.29):
+#   VLLM_ALLREDUCE_USE_FLASHINFER=0
+#   VLLM_USE_V2_MODEL_RUNNER=0
+#   --disable-custom-all-reduce
+#   NCCL_IB_HCA exact-match (== form from HF MIXED card)
+#
+# HARD: leave --quantization UNSET; TRITON_ATTN; no prefix cache; DFlash n=7 (NOT lattice)
+#
+# Env (both boxes, same .env): MODEL_HOST_PATH, DRAFT_HOST_PATH, PATCH_HOST_PATH,
+#   MASTER_IP, NODE1_IP, IFACE, IB_HCA
+#
+# Start on rank-1 box:
+#   docker compose -f docker-compose.tp2-rank1.yml up -d
+#   docker compose -f docker-compose.tp2-rank1.yml logs -f
+#
+# No InfiniBand? Comment out devices:/dev/infiniband, NCCL_IB_HCA, NCCL_IB_GID_INDEX,
+# and cap_add IPC_LOCK. Keep NCCL_SOCKET_IFNAME on the fast nic.
+
+services:
+  vllm-tp2-rank1:
+    image: ${SPARK_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni}
+    container_name: tp2-node1
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "16g"
+    ulimits:
+      memlock: -1
+    cap_add:
+      - IPC_LOCK
+    devices:
+      - /dev/infiniband
+
+    entrypoint: vllm
+
+    environment:
+      - VLLM_HOST_IP=${NODE1_IP:-10.10.10.2}
+      - NCCL_SOCKET_IFNAME=${IFACE:-enp1s0f0np0}
+      - GLOO_SOCKET_IFNAME=${IFACE:-enp1s0f0np0}
+      # Exact-match form: value must be "=rocep...:1" (IB_HCA==rocep... in shell/.env)
+      - NCCL_IB_HCA=${IB_HCA:-=rocep1s0f0:1}
+      - NCCL_IB_GID_INDEX=3
+      - NCCL_DEBUG=WARN
+      - VLLM_USE_FLASHINFER_SAMPLER=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - VLLM_USE_V2_MODEL_RUNNER=0
+      - VLLM_ALLREDUCE_USE_FLASHINFER=0
+      - TORCH_CUDA_ARCH_LIST=12.1a
+      - NVIDIA_FORWARD_COMPAT=1
+      - NVIDIA_DISABLE_REQUIRE=1
+      - ENABLE_NVFP4_SM100=0
+      - VLLM_USE_FLASHINFER_MOE_FP4=0
+
+    volumes:
+      - ${MODEL_HOST_PATH:-./models/aeon-mixed}:/model:ro
+      - ${DRAFT_HOST_PATH:-./models/dflash2}:/draft:ro
+      - ${PATCH_HOST_PATH:-./patches/modelopt-54367.py}:/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
+
+    command:
+      - serve
+      - /model
+      - --headless
+      - --tensor-parallel-size
+      - "2"
+      - --nnodes
+      - "2"
+      - --node-rank
+      - "1"
+      - --master-addr
+      - ${MASTER_IP:-10.10.10.1}
+      - --master-port
+      - "${MASTER_PORT:-29501}"
+      - --kv-cache-dtype
+      - fp8_e4m3
+      - --attention-backend
+      - TRITON_ATTN
+      - --max-model-len
+      - "1000000"
+      - --max-num-seqs
+      - "16"
+      - --max-num-batched-tokens
+      - "16384"
+      - --gpu-memory-utilization
+      - "0.70"
+      - --disable-custom-all-reduce
+      - --enable-chunked-prefill
+      - --no-enable-prefix-caching
+      - --mamba-cache-mode
+      - align
+      - --limit-mm-per-prompt
+      - '{"image":4,"video":2}'
+      - --speculative-config
+      - '{"method":"dflash","model":"/draft","num_speculative_tokens":7}'
+      - --hf-overrides
+      - '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
+      - --override-generation-config
+      - '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
+      - --trust-remote-code
+
+    # Rank 1 must be --headless. Do NOT give --host / --port / --served-model-name.
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -1,0 +1,102 @@
+# docker-compose.yml - Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED on RTX 5090
+#
+# Hardware: NVIDIA RTX 5090 (sm_120, 32 GB dedicated GDDR7)
+# Image:    ghcr.io/aeon-7/aeon-vllm-ultimate-rtx:latest
+#           (= :2026-09-07-omni-mm - ModelOpt #54367 + vllm-omni MM)
+#           Pin dated if you want known-good: :2026-09-07-omni-mm
+#
+# Spec:     In-checkpoint MTP n=3 - NO DFlash on 32 GB
+# HARD:     Leave --quantization UNSET; TRITON_ATTN; no prefix cache
+#           #54367 optional on :latest / 2026-09-07-omni-mm; REQUIRED on older Aug-21
+#
+# Do NOT cross-use the Spark image (sm_121a / aarch64). This is sm_120 / amd64.
+#
+# Downloads (from this directory or repo root):
+#   hf download AEON-7/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED \
+#     --local-dir ../../models/aeon-mixed
+# Prefer HF cache mount + repo-id over snapshot-only mounts.
+#
+# Start:
+#   docker compose up -d
+#   docker compose logs -f vllm
+#
+# If KV will not allocate at 131k: util 0.95, then drop --max-num-seqs to 2.
+
+services:
+  vllm:
+    image: ${RTX_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate-rtx:latest}
+    container_name: aeon-mixed-5090
+    restart: unless-stopped
+    ipc: host
+    shm_size: "8g"
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    ulimits:
+      memlock: -1
+
+    entrypoint: vllm
+
+    environment:
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - NVIDIA_VISIBLE_DEVICES=all
+
+    volumes:
+      - ${MODEL_HOST_PATH:-../../models/aeon-mixed}:/model:ro
+      # Optional on :latest / 2026-09-07-omni-mm (folded); required on Aug-21
+      # RTX path uses dist-packages (not site-packages)
+      - ${PATCH_HOST_PATH:-../../patches/modelopt-54367.py}:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
+
+    command:
+      - serve
+      - /model
+      - --served-model-name
+      - aeon
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      # Leave --quantization UNSET
+      - --max-model-len
+      - "131072"
+      - --max-num-seqs
+      - "4"
+      - --max-num-batched-tokens
+      - "8192"
+      - --gpu-memory-utilization
+      - "0.92"
+      - --kv-cache-dtype
+      - fp8_e4m3
+      - --mamba-ssm-cache-dtype
+      - bfloat16
+      - --attention-backend
+      - TRITON_ATTN
+      - --enable-chunked-prefill
+      - --no-enable-prefix-caching
+      - --limit-mm-per-prompt
+      - '{"image":2,"video":1}'
+      - --speculative-config
+      - '{"method":"mtp","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN"}'
+      - --reasoning-parser
+      - qwen3
+      - --tool-call-parser
+      - qwen3_coder
+      - --enable-auto-tool-choice
+      - --override-generation-config
+      - '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
+      - --trust-remote-code
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

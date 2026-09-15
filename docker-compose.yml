@@ -1,0 +1,149 @@
+# docker-compose.yml - Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED
+# 1x DGX Spark / GB10 - Dynamic DFlash lattice (DEFAULT / production)
+#
+# Image:   ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni
+#          digest sha256:2421bb1228a85370c1c50adb31f605c4361acf4d48d65282fcb919e74f34fae7
+#          Pin dated until GHCR :latest matches that digest.
+#          Rollback: :2026-09-07-reasoning-eos
+# Hardware: DGX Spark (NVIDIA GB10, 128 GB UMA, sm_121a / aarch64)
+#
+# Spec:    Dynamic DFlash lattice via z-lab/Qwen3.8-27B-DFlash2
+#          num_speculative_tokens_per_batch_size:
+#            [[1,1,10],[2,2,10],[3,4,8],[5,8,7],[9,10,6],[11,12,5],[13,14,4],[15,16,3]]
+#          Runtime K: c1-2->10, c3-4->8, c5-8->7, c9-10->6, c11-12->5, c13-14->4, c15-16->3
+# Peak:    237.67 tok/s wave-peak Coding@c16 (AEON Bench mothership)
+#
+# HARD MIXED locks (do not invent):
+#   - Leave --quantization UNSET (hf_quant_config.json -> modelopt_mixed)
+#   - Always --attention-backend TRITON_ATTN
+#   - Always --no-enable-prefix-caching
+#   - Bind ModelOpt #54367 (required on 0.29 for this lattice)
+#   - util 0.80 default (downshift if secondary services; 0.85 dedicated-only optional)
+#   - Never MTP + DFlash together; Spark = DFlash only
+#   - repetition_penalty 1.0 (values >1.0 break /parameter / XML tool parsers)
+#
+# Required downloads (run once from repo root):
+#   hf auth login
+#   hf download AEON-7/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED \
+#     --local-dir ./models/aeon-mixed
+#   hf download z-lab/Qwen3.8-27B-DFlash2 \
+#     --local-dir ./models/dflash2
+#   # Or mount HF cache root and serve by repo-id (preferred for symlink trees):
+#   #   -v $HOME/.cache/huggingface:/root/.cache/huggingface:ro
+#   #   serve AEON-7/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED --revision <rev>
+#
+# Place patches/modelopt-54367.py (shipped in this repo under patches/).
+#
+# Start:
+#   cp .env.example .env   # edit paths if needed
+#   docker compose up -d
+#   docker compose logs -f vllm
+#
+# Test:
+#   curl http://localhost:8000/v1/chat/completions \
+#     -H "Content-Type: application/json" \
+#     -d '{"model":"aeon","messages":[{"role":"user","content":"Hello"}],"max_tokens":64}'
+
+services:
+  vllm:
+    image: ${SPARK_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni}
+    container_name: aeon-mixed-spark
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    ulimits:
+      memlock: -1
+
+    # Image ENTRYPOINT is /bin/bash - override to vllm, command starts at `serve`.
+    entrypoint: vllm
+
+    environment:
+      # ─── Core (published MIXED single-Spark seat) ───
+      - VLLM_USE_V2_MODEL_RUNNER=1
+      - VLLM_ENABLE_CUDA_COMPATIBILITY=0
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+
+      # ─── GB10 / sm_121a runtime (still applies on 0.29) ───
+      - TORCH_CUDA_ARCH_LIST=12.1a
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - TORCH_MATMUL_PRECISION=high
+      - NVIDIA_FORWARD_COMPAT=1
+      - NVIDIA_DISABLE_REQUIRE=1
+      # PR #40191 guard - sm_121a-only builds must not pull SM100 mxfp4 symbols
+      - ENABLE_NVFP4_SM100=0
+      # Dense model - skip FlashInfer FP4 MoE auto-probe spam
+      - VLLM_USE_FLASHINFER_MOE_FP4=0
+      - VLLM_USE_FLASHINFER_SAMPLER=1
+
+    volumes:
+      # MIXED body ~23.8G (materialized local-dir or verified snapshot)
+      - ${MODEL_HOST_PATH:-./models/aeon-mixed}:/model:ro
+      # DFlash2 drafter (Spark only - never hang on 5090)
+      - ${DRAFT_HOST_PATH:-./models/dflash2}:/draft:ro
+      # ModelOpt #54367 - REQUIRED on 2026-09-11-v0.29.0-omni for MIXED
+      - ${PATCH_HOST_PATH:-./patches/modelopt-54367.py}:/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
+
+    command:
+      - serve
+      - /model
+      - --served-model-name
+      - aeon
+      - aeon-ultimate
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      # Leave --quantization UNSET -> hf_quant_config.json selects modelopt_mixed
+      - --gpu-memory-utilization
+      - "0.80"
+      - --max-model-len
+      - "262144"
+      - --max-num-seqs
+      - "16"
+      - --max-num-batched-tokens
+      - "16384"
+      - --kv-cache-dtype
+      - fp8
+      - --enable-chunked-prefill
+      - --no-enable-prefix-caching
+      - --tool-call-parser
+      - qwen3_coder
+      - --enable-auto-tool-choice
+      - --reasoning-parser
+      - qwen3
+      - --limit-mm-per-prompt
+      - '{"image":4,"video":2}'
+      - --attention-backend
+      - TRITON_ATTN
+      - --compilation-config
+      - '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+      - --trust-remote-code
+      # Dynamic DFlash lattice (EXACT peak-16 map) - peak 237.67 tok/s Coding@c16
+      - --speculative-config
+      - '{"method":"dflash","model":"/draft","num_speculative_tokens":10,"num_speculative_tokens_per_batch_size":[[1,1,10],[2,2,10],[3,4,8],[5,8,7],[9,10,6],[11,12,5],[13,14,4],[15,16,3]],"attention_backend":"TRITON_ATTN"}'
+      - --override-generation-config
+      - '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
+
+    # Notes:
+    #   - util 0.80 default. Downshift if secondary GPU services share the Spark.
+    #     Optional 0.85 on dedicated LLM-only boxes. Beyond 0.80 risks UMA OOM under high KV.
+    #   - Do NOT enable prefix caching on this MIXED recipe.
+    #   - Do NOT set --quantization (compressed-tensors / nvfp4 / modelopt all wrong for MIXED).
+    #   - Do NOT use flash_attn - must TRITON_ATTN.
+    #   - Do NOT mix MTP with DFlash.
+    #   - Drafter is z-lab/Qwen3.8-27B-DFlash2 (NOT the Qwen3.6 drafter).
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

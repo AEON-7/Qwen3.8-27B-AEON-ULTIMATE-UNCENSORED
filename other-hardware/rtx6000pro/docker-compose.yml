@@ -1,0 +1,92 @@
+# docker-compose.yml - Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED on RTX PRO 6000
+#
+# Hardware: NVIDIA RTX PRO 6000 Blackwell (sm_120, 96 GB dedicated GDDR7)
+# Image:    ghcr.io/aeon-7/aeon-vllm-ultimate-rtx:latest
+#           (= :2026-09-07-omni-mm). Do NOT use stock vllm/vllm-openai for Qwen3.8 MIXED.
+#
+# Status:   VALIDATED for Qwen3.8 MIXED (unlike the experimental Qwen3.6 stock-vllm recipe).
+# Spec:     MTP n=3 (preferred). NO DFlash required.
+# HARD:     Leave --quantization UNSET; TRITON_ATTN; no prefix cache
+#           Put attention_backend inside speculative-config (top-level may not propagate)
+#
+# Knobs:    max-model-len 262144, seqs 8, util 0.80, batched 8192, kv fp8_e4m3
+#
+# Start:
+#   docker compose up -d
+#   docker compose logs -f vllm
+
+services:
+  vllm:
+    image: ${RTX_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate-rtx:latest}
+    container_name: aeon-mixed-pro6000
+    restart: unless-stopped
+    ipc: host
+    shm_size: "16g"
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    ulimits:
+      memlock: -1
+
+    entrypoint: vllm
+
+    environment:
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - NVIDIA_VISIBLE_DEVICES=all
+
+    volumes:
+      - ${MODEL_HOST_PATH:-../../models/aeon-mixed}:/model:ro
+      - ${PATCH_HOST_PATH:-../../patches/modelopt-54367.py}:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
+
+    command:
+      - serve
+      - /model
+      - --served-model-name
+      - aeon
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --max-model-len
+      - "262144"
+      - --max-num-seqs
+      - "8"
+      - --max-num-batched-tokens
+      - "8192"
+      - --gpu-memory-utilization
+      - "0.80"
+      - --kv-cache-dtype
+      - fp8_e4m3
+      - --mamba-ssm-cache-dtype
+      - bfloat16
+      - --attention-backend
+      - TRITON_ATTN
+      - --enable-chunked-prefill
+      - --no-enable-prefix-caching
+      - --limit-mm-per-prompt
+      - '{"image":4,"video":2}'
+      - --speculative-config
+      - '{"method":"mtp","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN"}'
+      - --reasoning-parser
+      - qwen3
+      - --tool-call-parser
+      - qwen3_coder
+      - --enable-auto-tool-choice
+      - --override-generation-config
+      - '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
+      - --trust-remote-code
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
