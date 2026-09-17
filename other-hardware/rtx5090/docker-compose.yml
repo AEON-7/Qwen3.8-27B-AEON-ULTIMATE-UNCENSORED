@@ -6,7 +6,7 @@
 #           Pin dated if you want known-good: :2026-09-07-omni-mm
 #
 # Spec:     In-checkpoint MTP n=3 - NO DFlash on 32 GB
-# HARD:     Leave --quantization UNSET; TRITON_ATTN; no prefix cache
+# HARD:     Leave --quantization UNSET; TRITON_ATTN; prefix cache ON (omit --no-enable-prefix-caching)
 #           #54367 optional on :latest / 2026-09-07-omni-mm; REQUIRED on older Aug-21
 #
 # Do NOT cross-use the Spark image (sm_121a / aarch64). This is sm_120 / amd64.
@@ -72,7 +72,6 @@ services:
       - --attention-backend
       - TRITON_ATTN
       - --enable-chunked-prefill
-      - --no-enable-prefix-caching
       - --limit-mm-per-prompt
       - '{"image":2,"video":1}'
       - --speculative-config

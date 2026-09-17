@@ -15,8 +15,8 @@
 #
 # HARD MIXED locks (do not invent):
 #   - Leave --quantization UNSET (hf_quant_config.json -> modelopt_mixed)
+#   - Prefix caching ON (omit --no-enable-prefix-caching); bench/Perf may disable for TTFT
 #   - Always --attention-backend TRITON_ATTN
-#   - Always --no-enable-prefix-caching
 #   - Bind ModelOpt #54367 (required on 0.29 for this lattice)
 #   - util 0.80 default (downshift if secondary services; 0.85 dedicated-only optional)
 #   - Never MTP + DFlash together; Spark = DFlash only
@@ -105,7 +105,6 @@ services:
       - --kv-cache-dtype
       - fp8
       - --enable-chunked-prefill
-      - --no-enable-prefix-caching
       - --tool-call-parser
       - qwen3_coder
       - --enable-auto-tool-choice
@@ -127,7 +126,7 @@ services:
     # Notes:
     #   - util 0.80 default. Downshift if secondary GPU services share the Spark.
     #     Optional 0.85 on dedicated LLM-only boxes. Beyond 0.80 risks UMA OOM under high KV.
-    #   - Do NOT enable prefix caching on this MIXED recipe.
+    #   - Prefix caching ON for normal serve. Bench/Perf/God Mode may use --no-enable-prefix-caching for TTFT purity.
     #   - Do NOT set --quantization (compressed-tensors / nvfp4 / modelopt all wrong for MIXED).
     #   - Do NOT use flash_attn - must TRITON_ATTN.
     #   - Do NOT mix MTP with DFlash.

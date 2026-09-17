@@ -6,7 +6,7 @@
 # Order: rank 1 headless FIRST (docker-compose.tp2-rank1.yml), then THIS file.
 # Clients: http://$MASTER_IP:8000  model=aeon
 #
-# B0 knobs same as rank 1. Leave --quantization UNSET. TRITON_ATTN. No prefix cache.
+# B0 knobs same as rank 1. Leave --quantization UNSET. TRITON_ATTN. Prefix cache ON (omit --no-enable-prefix-caching).
 # Spec is fixed DFlash2 n=7 - NOT the single-Spark Dynamic DFlash lattice.
 #
 # Optional 64k speed seat (same flags, deltas):
@@ -91,7 +91,6 @@ services:
       - "0.70"
       - --disable-custom-all-reduce
       - --enable-chunked-prefill
-      - --no-enable-prefix-caching
       - --mamba-cache-mode
       - align
       - --limit-mm-per-prompt

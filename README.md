@@ -22,7 +22,10 @@ Gen defaults for every seat: `temperature 0.6`, `top_p 0.95`, `top_k 20`, `repet
 
 Prefer `repetition_penalty: 1.0` for tool calling / structured output. Values above 1.0 can penalize repeated structural tokens (e.g. `/parameter`, XML tags) and break parsers.
 
-**Hard MIXED rules:** leave `--quantization` **unset** (so `hf_quant_config.json` selects `modelopt_mixed`); always `--attention-backend TRITON_ATTN`; always `--no-enable-prefix-caching`; on Spark `2026-09-11-v0.29.0-omni`, bind-mount ModelOpt **#54367** (`modelopt-54367.py` from the MIXED repo). Prefer mounting the HF cache root + serving by repo-id over snapshot-only mounts (symlink trees dangle inside Docker).
+**Hard MIXED rules:** leave `--quantization` **unset** (so `hf_quant_config.json` selects `modelopt_mixed`); always `--attention-backend TRITON_ATTN`; prefix caching **ON** (omit `--no-enable-prefix-caching`); on Spark `2026-09-11-v0.29.0-omni`, bind-mount ModelOpt **#54367** (`modelopt-54367.py` from the MIXED repo). Prefer mounting the HF cache root + serving by repo-id over snapshot-only mounts (symlink trees dangle inside Docker).
+
+> **Prefix cache:** Prefix caching (APC) is ON for normal multi-turn / shared-prefix serve (vLLM default when you omit --no-enable-prefix-caching). For scored Perf / God Mode measurement boards you may still pass --no-enable-prefix-caching so TTFT is not helped by cross-request cache hits.
+
 
 ### Knob cheat-sheet
 
@@ -77,7 +80,6 @@ docker run -d --gpus all --network host \
   --max-num-batched-tokens 16384 \
   --kv-cache-dtype fp8 \
   --enable-chunked-prefill \
-  --no-enable-prefix-caching \
   --tool-call-parser qwen3_coder \
   --enable-auto-tool-choice \
   --reasoning-parser qwen3 \
@@ -138,7 +140,7 @@ docker run -d --name aeon-mixed-5090 --gpus all --ipc=host --shm-size=8g -p 8000
   --max-model-len 131072 --max-num-seqs 4 --max-num-batched-tokens 8192 \
   --gpu-memory-utilization 0.92 --kv-cache-dtype fp8_e4m3 \
   --mamba-ssm-cache-dtype bfloat16 --attention-backend TRITON_ATTN \
-  --enable-chunked-prefill --no-enable-prefix-caching \
+  --enable-chunked-prefill \
   --limit-mm-per-prompt '{"image":2,"video":1}' \
   --speculative-config '{"method":"mtp","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN"}' \
   --reasoning-parser qwen3 --tool-call-parser qwen3_coder --enable-auto-tool-choice \

@@ -6,7 +6,7 @@
 #
 # Status:   VALIDATED for Qwen3.8 MIXED (unlike the experimental Qwen3.6 stock-vllm recipe).
 # Spec:     MTP n=3 (preferred). NO DFlash required.
-# HARD:     Leave --quantization UNSET; TRITON_ATTN; no prefix cache
+# HARD:     Leave --quantization UNSET; TRITON_ATTN; prefix cache ON (omit --no-enable-prefix-caching)
 #           Put attention_backend inside speculative-config (top-level may not propagate)
 #
 # Knobs:    max-model-len 262144, seqs 8, util 0.80, batched 8192, kv fp8_e4m3
@@ -62,7 +62,6 @@ services:
       - --attention-backend
       - TRITON_ATTN
       - --enable-chunked-prefill
-      - --no-enable-prefix-caching
       - --limit-mm-per-prompt
       - '{"image":4,"video":2}'
       - --speculative-config

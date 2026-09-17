@@ -33,7 +33,7 @@ Do **not** apply Spark util/DFlash/image advice to RTX, or RTX MTP advice to Spa
 | **RTX image** | `ghcr.io/aeon-7/aeon-vllm-ultimate-rtx:latest` | Do **not** cross Spark ↔ RTX images |
 | **Quantization** | **Leave `--quantization` UNSET** | `hf_quant_config.json` -> `modelopt_mixed`. Never `compressed-tensors` / `nvfp4` / `modelopt` / `modelopt_fp4` on this tree |
 | **Attention** | **`--attention-backend TRITON_ATTN`** | Never `flash_attn` on these MIXED recipes |
-| **Prefix cache** | **`--no-enable-prefix-caching`** | Always off on published MIXED seats |
+| **Prefix cache** | **ON (vLLM default / APC)** | Omit `--no-enable-prefix-caching` on published serve seats. Bench/Perf/God Mode may disable for TTFT purity |
 | **Spark spec** | **Dynamic DFlash lattice** + `z-lab/Qwen3.8-27B-DFlash2` | Exact map below; peak **237.67** tok/s Coding@c16 |
 | **TP=2 spec** | Fixed **DFlash2 n=7** | Not the lattice |
 | **RTX spec** | **MTP n=3** | No DFlash on 5090 |
@@ -90,14 +90,16 @@ Runtime K: c1-2->10, c3-4->8, c5-8->7, c9-10->6, c11-12->5, c13-14->4, c15-16->3
 
 **Why:** Published Qwen3.8 MIXED seats (Spark + RTX long) require **`TRITON_ATTN`**. On RTX sm_120, FlashInfer attention + fp8 KV can emit **garbage tokens**.
 
-### 3. Don't enable prefix caching on these recipes
+### 3. Do enable prefix caching on published serve recipes (APC)
 
 ```
-# WRONG:
+# CORRECT for public serve (multi-turn / shared system prefix):
+# omit --no-enable-prefix-caching  (vLLM enables APC by default)
+# or explicitly:
 --enable-prefix-caching
 ```
 
-**Why:** All published MIXED seats use **`--no-enable-prefix-caching`**. Qwen3.6 Spark production may enable prefix cache under different patches - that advice does **not** transfer.
+**Why:** Published MIXED serve seats keep **prefix caching ON** for normal multi-turn / shared-prefix traffic. Only scored Perf / God Mode measurement runs may pass `--no-enable-prefix-caching` so TTFT is not inflated by cross-request cache hits.
 
 ### 4. Don't use DFlash on 5090 (MTP only)
 
@@ -175,7 +177,7 @@ Drafter: **`z-lab/Qwen3.8-27B-DFlash2`** (not `Qwen3.6-27B-DFlash`). Body: MIXED
 |---|---|---|
 | *(no `--quantization`)* | unset | modelopt_mixed via hf_quant_config |
 | `--attention-backend` | `TRITON_ATTN` | MIXED lock |
-| `--no-enable-prefix-caching` | flag | MIXED lock |
+| *(prefix caching)* | ON (default) | APC for serve; omit `--no-enable-prefix-caching` |
 | `--gpu-memory-utilization` | `0.80` | UMA-safe default |
 | `--max-model-len` | `262144` | Published single Spark |
 | `--max-num-seqs` | `16` | Lattice peak-16 map |
@@ -271,3 +273,8 @@ If Spark median is far below published lattice behavior, check #54367 bind, unse
 - Do not invent quant, attention, or speculative flags.
 - Do not treat Qwen3.6 AGENTS.md flags as transferable.
 - If stuck after one log read + one table match, stop and ask the human.
+
+
+## Prefix caching note
+
+Prefix caching (APC) is ON for normal multi-turn / shared-prefix serve (vLLM default when you omit --no-enable-prefix-caching). For scored Perf / God Mode measurement boards you may still pass --no-enable-prefix-caching so TTFT is not helped by cross-request cache hits.
