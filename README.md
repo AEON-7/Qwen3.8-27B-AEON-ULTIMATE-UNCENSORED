@@ -22,7 +22,7 @@ Gen defaults for every seat: `temperature 0.6`, `top_p 0.95`, `top_k 20`, `repet
 
 Prefer `repetition_penalty: 1.0` for tool calling / structured output. Values above 1.0 can penalize repeated structural tokens (e.g. `/parameter`, XML tags) and break parsers.
 
-**Hard MIXED rules:** leave `--quantization` **unset** (so `hf_quant_config.json` selects `modelopt_mixed`); always `--attention-backend TRITON_ATTN`; prefix caching **ON** (omit `--no-enable-prefix-caching`); on Spark `2026-09-11-v0.29.0-omni`, bind-mount ModelOpt **#54367** (`modelopt-54367.py` from the MIXED repo). Prefer mounting the HF cache root + serving by repo-id over snapshot-only mounts (symlink trees dangle inside Docker).
+**Hard MIXED rules:** leave `--quantization` **unset** (so `hf_quant_config.json` selects `modelopt_mixed`); always `--attention-backend TRITON_ATTN`; prefix caching **ON** (omit `--no-enable-prefix-caching`); on Spark `2026-09-18-v0.29.0-omni`, ModelOpt **#54367** is baked into `2026-09-18-v0.29.0-omni`+; bind `modelopt-54367.py` only on older Spark tags. Prefer mounting the HF cache root + serving by repo-id over snapshot-only mounts (symlink trees dangle inside Docker).
 
 > **Prefix cache:** Prefix caching (APC) is ON for normal multi-turn / shared-prefix serve (vLLM default when you omit --no-enable-prefix-caching). For scored Perf / God Mode measurement boards you may still pass --no-enable-prefix-caching so TTFT is not helped by cross-request cache hits.
 
@@ -42,7 +42,7 @@ Prefer `repetition_penalty: 1.0` for tool calling / structured output. Values ab
 
 ### 1) Single DGX Spark / GB10 - Dynamic DFlash lattice (quality + throughput)
 
-One published Spark serve seat. Image pin: `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni` (digest `sha256:2421bb1228a85370c1c50adb31f605c4361acf4d48d65282fcb919e74f34fae7`; `:latest` only if it matches). Drafter: `z-lab/Qwen3.8-27B-DFlash2`. Spec: locked **Dynamic DFlash lattice** (peak-16 map). Default util **0.80**, seqs **16**, 262k, **MRv2** (`VLLM_USE_V2_MODEL_RUNNER=1`), `FULL_AND_PIECEWISE`. #54367 bind **required** for MIXED on 0.29.
+One published Spark serve seat. Image pin: `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni` (digest `sha256:cc91c51559d66854718fd9a8db6423e605ba76fb338bb55902caccb62aa9c677`; `:latest` only if it matches). Drafter: `z-lab/Qwen3.8-27B-DFlash2`. Spec: locked **Dynamic DFlash lattice** (peak-16 map). Default util **0.80**, seqs **16**, 262k, **MRv2** (`VLLM_USE_V2_MODEL_RUNNER=1`), `FULL_AND_PIECEWISE`. #54367 + DFlash2 fixes **baked into** `2026-09-18-v0.29.0-omni`+ (bind only on older tags).
 
 > **Dynamic DFlash lattice** - locked peak-16 map. This seat is **both quality and throughput** (not a lower-quality "Perf-only" lane).
 >
@@ -60,8 +60,8 @@ One published Spark serve seat. Image pin: `ghcr.io/aeon-7/aeon-vllm-ultimate:20
 ```bash
 MODEL=$HOME/.cache/huggingface/hub/models--AEON-7--Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED/snapshots/<rev>
 DRAFT=/path/to/z-lab__Qwen3.8-27B-DFlash2
-PATCH=/path/to/modelopt-54367.py
-IMAGE=ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni
+PATCH=/path/to/modelopt-54367.py   # optional on 2026-09-18+ (baked in); required on older 0.29 tags
+IMAGE=ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni
 
 docker rm -f aeon-mixed-spark 2>/dev/null
 docker run -d --gpus all --network host \
@@ -70,7 +70,7 @@ docker run -d --gpus all --network host \
   -e VLLM_ENABLE_CUDA_COMPATIBILITY=0 \
   -e VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
   -v "$MODEL:/model:ro" -v "$DRAFT:/draft:ro" \
-  -v "$PATCH:/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/modelopt.py:ro" \
+  # -v "$PATCH:/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/modelopt.py:ro" \  # optional on 2026-09-18+
   --entrypoint vllm "$IMAGE" serve /model \
   --served-model-name aeon \
   --host 0.0.0.0 --port 8000 \
@@ -109,7 +109,7 @@ Start **rank 1 (headless) first**, then rank 0 (API). Clients hit `http://$MASTE
 Sketch of the shared env + serve shape:
 
 ```bash
-IMAGE=ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni
+IMAGE=ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni
 # B0 / coherence knobs on 0.29:
 #   -e VLLM_ALLREDUCE_USE_FLASHINFER=0
 #   -e VLLM_USE_V2_MODEL_RUNNER=0
@@ -192,7 +192,7 @@ Calib **1024x2048**. Export gate: `found=168 missing=0 last8_mlp_fp8=24`. Post-e
 
 | Seat | Image |
 |---|---|
-| DGX Spark / GB10 | `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni` |
+| DGX Spark / GB10 | `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni` |
 | RTX 5090 / PRO 6000 | `ghcr.io/aeon-7/aeon-vllm-ultimate-rtx:latest` |
 
 Do **not** cross Spark and RTX images. Spark is sm_121a / aarch64 UMA. RTX is sm_120 / amd64 dedicated VRAM.

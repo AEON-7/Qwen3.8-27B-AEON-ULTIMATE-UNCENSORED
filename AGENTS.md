@@ -29,7 +29,7 @@ Do **not** apply Spark util/DFlash/image advice to RTX, or RTX MTP advice to Spa
 | Thing | Value | Don't second-guess |
 |---|---|---|
 | **Body** | `AEON-7/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED` (~23.8G) | Not the Qwen3.6 tree; not compressed-tensors-only dumps |
-| **Spark image** | `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni` (digest `sha256:2421bb...`) | Pin dated until `:latest` matches; rollback `:2026-09-07-reasoning-eos`. ENTRYPOINT is bash -> compose sets `entrypoint: vllm` |
+| **Spark image** | `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni` (digest `sha256:cc91c515...`) | Pin dated until `:latest` matches; rollback `:2026-09-07-reasoning-eos`. ENTRYPOINT is bash -> compose sets `entrypoint: vllm` |
 | **RTX image** | `ghcr.io/aeon-7/aeon-vllm-ultimate-rtx:latest` | Do **not** cross Spark ↔ RTX images |
 | **Quantization** | **Leave `--quantization` UNSET** | `hf_quant_config.json` -> `modelopt_mixed`. Never `compressed-tensors` / `nvfp4` / `modelopt` / `modelopt_fp4` on this tree |
 | **Attention** | **`--attention-backend TRITON_ATTN`** | Never `flash_attn` on these MIXED recipes |
@@ -38,7 +38,7 @@ Do **not** apply Spark util/DFlash/image advice to RTX, or RTX MTP advice to Spa
 | **TP=2 spec** | Fixed **DFlash2 n=7** | Not the lattice |
 | **RTX spec** | **MTP n=3** | No DFlash on 5090 |
 | **Spark util** | **0.80** default | Downshift if sidecars; optional **0.85** dedicated-only; beyond 0.80 -> UMA OOM risk |
-| **#54367** | Bind `patches/modelopt-54367.py` on Spark 0.29 | **Required** for MIXED on `2026-09-11-v0.29.0-omni` |
+| **#54367** | Bind `patches/modelopt-54367.py` on Spark 0.29 | **Baked into** `2026-09-18-v0.29.0-omni`+; bind only on older 0.29 tags |
 | **Gen defaults** | temp 0.6, top_p 0.95, top_k 20, **`repetition_penalty` 1.0** | **>1.0 breaks `/parameter` / XML tool parsers** |
 | **Served name** | `aeon` (alias `aeon-ultimate` OK) | |
 | **Chat** | `reasoning-parser qwen3`, `tool-call-parser qwen3_coder`, `enable-auto-tool-choice` | |
@@ -113,7 +113,7 @@ Spark published path is external DFlash. Never MTP + DFlash together.
 
 | Arch | Image |
 |---|---|
-| sm_121a / aarch64 UMA | `aeon-vllm-ultimate:2026-09-11-v0.29.0-omni` |
+| sm_121a / aarch64 UMA | `aeon-vllm-ultimate:2026-09-18-v0.29.0-omni` |
 | sm_120 / amd64 dedicated | `aeon-vllm-ultimate-rtx:latest` |
 
 ### 7. Don't raise Spark util above 0.80 without understanding UMA OOM

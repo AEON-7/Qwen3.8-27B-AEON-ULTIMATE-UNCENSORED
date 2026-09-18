@@ -1,7 +1,7 @@
 # docker-compose.tp2-rank0.yml - TP=2 rank 0 (API) - start AFTER rank 1
 #
 # Two DGX Sparks - quality seat: 1M YaRN factor-4 + fixed DFlash2 n=7
-# Image: ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni (+ #54367 bind)
+# Image: ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni (+ #54367 bind)
 #
 # Order: rank 1 headless FIRST (docker-compose.tp2-rank1.yml), then THIS file.
 # Clients: http://$MASTER_IP:8000  model=aeon
@@ -20,7 +20,7 @@
 
 services:
   vllm-tp2-rank0:
-    image: ${SPARK_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni}
+    image: ${SPARK_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni}
     container_name: tp2-node0
     restart: unless-stopped
     network_mode: host

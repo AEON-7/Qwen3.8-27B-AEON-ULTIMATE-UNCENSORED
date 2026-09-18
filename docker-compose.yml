@@ -1,8 +1,8 @@
 # docker-compose.yml - Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED
 # 1x DGX Spark / GB10 - Dynamic DFlash lattice (DEFAULT / production)
 #
-# Image:   ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni
-#          digest sha256:2421bb1228a85370c1c50adb31f605c4361acf4d48d65282fcb919e74f34fae7
+# Image:   ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni
+#          digest sha256:cc91c51559d66854718fd9a8db6423e605ba76fb338bb55902caccb62aa9c677
 #          Pin dated until GHCR :latest matches that digest.
 #          Rollback: :2026-09-07-reasoning-eos
 # Hardware: DGX Spark (NVIDIA GB10, 128 GB UMA, sm_121a / aarch64)
@@ -17,7 +17,7 @@
 #   - Leave --quantization UNSET (hf_quant_config.json -> modelopt_mixed)
 #   - Prefix caching ON (omit --no-enable-prefix-caching); bench/Perf may disable for TTFT
 #   - Always --attention-backend TRITON_ATTN
-#   - Bind ModelOpt #54367 (required on 0.29 for this lattice)
+#   - ModelOpt #54367 baked into 2026-09-18-v0.29.0-omni+ (optional bind for older tags)
 #   - util 0.80 default (downshift if secondary services; 0.85 dedicated-only optional)
 #   - Never MTP + DFlash together; Spark = DFlash only
 #   - repetition_penalty 1.0 (values >1.0 break /parameter / XML tool parsers)
@@ -32,7 +32,7 @@
 #   #   -v $HOME/.cache/huggingface:/root/.cache/huggingface:ro
 #   #   serve AEON-7/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-NVFP4-MIXED --revision <rev>
 #
-# Place patches/modelopt-54367.py (shipped in this repo under patches/).
+# Optional on 2026-09-18+: patches/modelopt-54367.py is baked into the image; keep for older tags.
 #
 # Start:
 #   cp .env.example .env   # edit paths if needed
@@ -46,7 +46,7 @@
 
 services:
   vllm:
-    image: ${SPARK_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-11-v0.29.0-omni}
+    image: ${SPARK_IMAGE:-ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni}
     container_name: aeon-mixed-spark
     restart: unless-stopped
     network_mode: host
@@ -80,7 +80,7 @@ services:
       - ${MODEL_HOST_PATH:-./models/aeon-mixed}:/model:ro
       # DFlash2 drafter (Spark only - never hang on 5090)
       - ${DRAFT_HOST_PATH:-./models/dflash2}:/draft:ro
-      # ModelOpt #54367 - REQUIRED on 2026-09-11-v0.29.0-omni for MIXED
+      # ModelOpt #54367 - baked into 2026-09-18-v0.29.0-omni+; bind optional (harmless) or for older tags
       - ${PATCH_HOST_PATH:-./patches/modelopt-54367.py}:/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
 
     command:
