@@ -48,7 +48,7 @@ Compose files are the **source of truth**. Don't invent flags.
 ### Dynamic DFlash lattice (1x Spark - EXACT)
 
 ```json
-{"method":"dflash","model":"/draft","num_speculative_tokens":10,"num_speculative_tokens_per_batch_size":[[1,1,10],[2,2,10],[3,4,8],[5,8,7],[9,10,6],[11,12,5],[13,14,4],[15,16,3]],"attention_backend":"TRITON_ATTN"}
+{"method":"dflash","model":"/draft","num_speculative_tokens":9,"num_speculative_tokens_per_batch_size":[[1,2,9],[3,4,8],[5,8,7],[9,12,6],[13,16,5]],"attention_backend":"TRITON_ATTN"}
 ```
 
 Runtime K: c1-2->10, c3-4->8, c5-8->7, c9-10->6, c11-12->5, c13-14->4, c15-16->3.
@@ -180,7 +180,7 @@ Drafter: **`z-lab/Qwen3.8-27B-DFlash2`** (not `Qwen3.6-27B-DFlash`). Body: MIXED
 | *(prefix caching)* | ON (default) | APC for serve; omit `--no-enable-prefix-caching` |
 | `--gpu-memory-utilization` | `0.80` | UMA-safe default |
 | `--max-model-len` | `262144` | Published single Spark |
-| `--max-num-seqs` | `16` | Lattice peak-16 map |
+| `--max-num-seqs` | `16` | Lattice gentler peak-16 map (c16 n=5) |
 | `--max-num-batched-tokens` | `16384` | Published |
 | `--kv-cache-dtype` | `fp8` | Single Spark |
 | `--enable-chunked-prefill` | flag | Long ctx |

@@ -9,7 +9,7 @@
 #
 # Spec:    Dynamic DFlash lattice via z-lab/Qwen3.8-27B-DFlash2
 #          num_speculative_tokens_per_batch_size:
-#            [[1,1,10],[2,2,10],[3,4,8],[5,8,7],[9,10,6],[11,12,5],[13,14,4],[15,16,3]]
+#            [[1,2,9],[3,4,8],[5,8,7],[9,12,6],[13,16,5]]
 #          Runtime K: c1-2->10, c3-4->8, c5-8->7, c9-10->6, c11-12->5, c13-14->4, c15-16->3
 # Peak:    237.67 tok/s wave-peak Coding@c16 (AEON Bench mothership)
 #
@@ -117,9 +117,9 @@ services:
       - --compilation-config
       - '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
       - --trust-remote-code
-      # Dynamic DFlash lattice (EXACT peak-16 map) - peak 237.67 tok/s Coding@c16
+      # Dynamic DFlash lattice (EXACT gentler peak-16 map (c16 n=5)) - peak 237.67 tok/s Coding@c16
       - --speculative-config
-      - '{"method":"dflash","model":"/draft","num_speculative_tokens":10,"num_speculative_tokens_per_batch_size":[[1,1,10],[2,2,10],[3,4,8],[5,8,7],[9,10,6],[11,12,5],[13,14,4],[15,16,3]],"attention_backend":"TRITON_ATTN"}'
+      - '{"method":"dflash","model":"/draft","num_speculative_tokens":9,"num_speculative_tokens_per_batch_size":[[1,2,9],[3,4,8],[5,8,7],[9,12,6],[13,16,5]],"attention_backend":"TRITON_ATTN"}'
       - --override-generation-config
       - '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
 

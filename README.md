@@ -42,14 +42,14 @@ Prefer `repetition_penalty: 1.0` for tool calling / structured output. Values ab
 
 ### 1) Single DGX Spark / GB10 - Dynamic DFlash lattice (quality + throughput)
 
-One published Spark serve seat. Image pin: `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni` (digest `sha256:cc91c51559d66854718fd9a8db6423e605ba76fb338bb55902caccb62aa9c677`; `:latest` only if it matches). Drafter: `z-lab/Qwen3.8-27B-DFlash2`. Spec: locked **Dynamic DFlash lattice** (peak-16 map). Default util **0.80**, seqs **16**, 262k, **MRv2** (`VLLM_USE_V2_MODEL_RUNNER=1`), `FULL_AND_PIECEWISE`. #54367 + DFlash2 fixes **baked into** `2026-09-18-v0.29.0-omni`+ (bind only on older tags).
+One published Spark serve seat. Image pin: `ghcr.io/aeon-7/aeon-vllm-ultimate:2026-09-18-v0.29.0-omni` (digest `sha256:cc91c51559d66854718fd9a8db6423e605ba76fb338bb55902caccb62aa9c677`; `:latest` only if it matches). Drafter: `z-lab/Qwen3.8-27B-DFlash2`. Spec: locked **Dynamic DFlash lattice** (gentler peak-16 map (c16 n=5)). Default util **0.80**, seqs **16**, 262k, **MRv2** (`VLLM_USE_V2_MODEL_RUNNER=1`), `FULL_AND_PIECEWISE`. #54367 + DFlash2 fixes **baked into** `2026-09-18-v0.29.0-omni`+ (bind only on older tags).
 
-> **Dynamic DFlash lattice** - locked peak-16 map. This seat is **both quality and throughput** (not a lower-quality "Perf-only" lane).
+> **Dynamic DFlash lattice** - locked map `[[1,2,9],[3,4,8],[5,8,7],[9,12,6],[13,16,5]]` (c1-2 n=9, c3-4 n=8, c5-8 n=7, c9-12 n=6, c13-16 n=5). This seat is **both quality and throughput** (not a lower-quality "Perf-only" lane).
 >
 > Native key: `num_speculative_tokens_per_batch_size`
 >
 > Exact map JSON:
-> `[[1,1,10],[2,2,10],[3,4,8],[5,8,7],[9,10,6],[11,12,5],[13,14,4],[15,16,3]]`
+> `[[1,2,9],[3,4,8],[5,8,7],[9,12,6],[13,16,5]]`
 >
 > Runtime K: c1-2->10, c3-4->8, c5-8->7, c9-10->6, c11-12->5, c13-14->4, c15-16->3
 >
@@ -87,11 +87,11 @@ docker run -d --gpus all --network host \
   --attention-backend TRITON_ATTN \
   --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
   --trust-remote-code \
-  --speculative-config '{"method":"dflash","model":"/draft","num_speculative_tokens":10,"num_speculative_tokens_per_batch_size":[[1,1,10],[2,2,10],[3,4,8],[5,8,7],[9,10,6],[11,12,5],[13,14,4],[15,16,3]],"attention_backend":"TRITON_ATTN"}' \
+  --speculative-config '{"method":"dflash","model":"/draft","num_speculative_tokens":9,"num_speculative_tokens_per_batch_size":[[1,2,9],[3,4,8],[5,8,7],[9,12,6],[13,16,5]],"attention_backend":"TRITON_ATTN"}' \
   --override-generation-config '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
 ```
 
-Ready when `/v1/models` lists `aeon`. The lattice is the whole trick: at low concurrency you can afford a fat draft (K=10); as the batch fills you taper to K=3 so verify cost does not eat the wave.
+Ready when `/v1/models` lists `aeon`. The lattice is the whole trick: c1-2 draft n=9, c3-4 n=8, c5-8 n=7, c9-12 n=6, c13-16 n=5 - taper verify cost without starving acceptance at high concurrency.
 
 ---
 
