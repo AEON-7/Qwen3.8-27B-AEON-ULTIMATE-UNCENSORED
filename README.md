@@ -8,6 +8,8 @@
 [![RTX container](https://img.shields.io/badge/ghcr.io-aeon--vllm--ultimate--rtx-blue?logo=docker)](https://github.com/AEON-7/vllm-ultimate-rtx/pkgs/container/aeon-vllm-ultimate-rtx)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 
+[![Buy me a lotus tea on LotusMake](https://lotusmake.com/badges/lotus-tea-dark.v1.svg)](https://lotusmake.com/support?via=tea)
+
 ## TL;DR
 
 This is the public recipe card for **Qwen3.8-27B AEON Ultimate Uncensored** - a willfully compliant 27B that answers instead of sermonizing, without chasing a vanity KL of zero. Weights live on Hugging Face: the **BF16 master** is the source of truth; the **NVFP4-MIXED** cut (~23.8G) is what you actually serve day to day on one DGX Spark, one RTX 5090, or one RTX PRO 6000. Speculative decode is seat-specific: the **single Spark** seat uses a locked **Dynamic DFlash lattice** (quality and throughput together - concurrency maps to draft depth); dual-Spark TP=2 keeps fixed **DFlash2 n=7**; RTX seats use in-checkpoint **MTP n=3**. Never run MTP and DFlash together.
@@ -215,11 +217,15 @@ Uncensored means **you** are the safety layer. Summary only - full **User Respon
 
 ## Support the work
 
-AEON-7 models, drafters and tools are built and trained independently, on my own hardware. If they're useful to you, please consider supporting development:
+AEON-7 models, drafters and tools are built and trained independently, on my own hardware. If they're useful to you, please consider supporting development.
 
-**[Become a member on Patreon → patreon.com/cw/AeonForge7/membership](https://www.patreon.com/cw/AeonForge7/membership)**
+Patreon wrongfully shut down our account without notice and never responded to our appeals, so we built something even better. You can now support the work on **LotusMake**: buy us a Lotus Tea, fund GPU hours, back a project you want to see done, or subscribe for early and full access to publications while supporting what we build. You can become a creator there too: join, apply to become a creator, and get paid for the work you do in public.
 
-Milestones unlock bigger work: reaching **500 paid supporters** will fund fine-tuning larger models and bigger project releases. Supporters also get early access to new releases, such as the [AEON DFlash2 drafter](https://www.patreon.com/AeonForge7/posts/early-access-for-171543895).
+[![Buy me a lotus tea on LotusMake](https://lotusmake.com/badges/lotus-tea-dark.v1.svg)](https://lotusmake.com/support?via=tea)
+
+**[AEON FORGE on LotusMake → lotusmake.com/c/aeon-forge](https://lotusmake.com/c/aeon-forge)** · **[Subscribe for early and full access](https://lotusmake.com/support?mode=tiers&from=%2Fc%2Faeon-forge)**
+
+Milestones unlock bigger work: reaching **500 paid supporters** will fund fine-tuning larger models and bigger project releases. Subscribers also get early access to new releases, such as the [AEON DFlash2 drafter](https://huggingface.co/AEON-7/AEON-DFlash2-Qwen3.8-27B).
 
 ## License
 
